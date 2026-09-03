@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Herramienta web para programación de obra con Gantt, CPM, ruta crítica y calendarización." />
+  <title>Gantt + CPM | Programación de Obra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <span class="eyebrow">Programación y control</span>
+      <h1>Gantt + CPM</h1>
+      <p>Herramienta para calendarización, ruta crítica y lectura de holguras.</p>
+    </div>
+    <div class="top-actions">
+      <button id="resetBtn" class="btn btn-secondary">Restablecer</button>
+      <button id="exportBtn" class="btn btn-primary">Exportar CSV</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="controls card">
+      <div class="control-group">
+        <label for="projectStart">Fecha de inicio</label>
+        <input type="date" id="projectStart" value="2026-09-05" />
+      </div>
+      <div class="control-group">
+        <label for="calendarMode">Calendario</label>
+        <select id="calendarMode">
+          <option value="natural">Días naturales</option>
+          <option value="laboral">Lunes a sábado</option>
+        </select>
+      </div>
+      <div class="control-group control-wide">
+        <label>Lectura rápida</label>
+        <div class="legend-inline">
+          <span><i class="dot critical"></i> Ruta crítica</span>
+          <span><i class="dot normal"></i> No crítica</span>
+          <span><i class="dot slack"></i> Mayor holgura</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <article class="kpi-card">
+        <span>Duración total</span>
+        <strong id="kpiDuration">84 días</strong>
+      </article>
+      <article class="kpi-card">
+        <span>Fin programado</span>
+        <strong id="kpiFinish">27/11/2026</strong>
+      </article>
+      <article class="kpi-card">
+        <span>Actividades críticas</span>
+        <strong id="kpiCritical">6</strong>
+      </article>
+      <article class="kpi-card">
+        <span>Ruta crítica</span>
+        <strong id="kpiRoute" class="route-text">C1 → C2 → C3 → C4 → C5 → C7</strong>
+      </article>
+    </section>
+
+    <section class="tabs-wrap">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="activities">Actividades</button>
+        <button class="tab" data-tab="gantt">Gantt</button>
+        <button class="tab" data-tab="cpm">CPM</button>
+        <button class="tab" data-tab="calendar">Calendarización</button>
+        <button class="tab" data-tab="network">Red CPM</button>
+      </div>
+
+      <div id="activities" class="tab-panel active">
+        <div class="card section-card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Base editable</span>
+              <h2>Hoja de actividades</h2>
+            </div>
+            <button id="addRowBtn" class="btn btn-secondary">Agregar actividad</button>
+          </div>
+          <div class="table-wrap">
+            <table id="activityTable">
+              <thead>
+                <tr>
+                  <th>Clave</th>
+                  <th>Actividad</th>
+                  <th>Predecesora</th>
+                  <th>Duración</th>
+                  <th>ES</th>
+                  <th>EF</th>
+                  <th>LS</th>
+                  <th>LF</th>
+                  <th>Holgura</th>
+                  <th>Crítica</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="gantt" class="tab-panel">
+        <div class="card section-card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Vista temporal</span>
+              <h2>Diagrama de Gantt</h2>
+            </div>
+          </div>
+          <div id="ganttWrap" class="gantt-wrap"></div>
+        </div>
+      </div>
+
+      <div id="cpm" class="tab-panel">
+        <div class="card section-card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Método CPM</span>
+              <h2>Lectura de ruta crítica y holguras</h2>
+            </div>
+          </div>
+          <div class="cpm-grid">
+            <div class="table-wrap">
+              <table id="cpmTable">
+                <thead>
+                  <tr>
+                    <th>Clave</th><th>Actividad</th><th>Dur.</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura</th><th>Clasificación</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <aside class="cpm-legend">
+              <h3>Cómo leer el CPM</h3>
+              <p><b>ES / EF:</b> inicio y fin tempranos.</p>
+              <p><b>LS / LF:</b> inicio y fin tardíos.</p>
+              <p><b>Holgura = 0:</b> la actividad controla el plazo.</p>
+              <div class="scale">
+                <span>0</span><div class="scale-bar"></div><span>máx.</span>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <div id="calendar" class="tab-panel">
+        <div class="card section-card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Fechas programadas</span>
+              <h2>Calendarización</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="calendarTable">
+              <thead>
+                <tr><th>Clave</th><th>Actividad</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Predecesora</th><th>Holgura</th><th>Ruta crítica</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="network" class="tab-panel">
+        <div class="card section-card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Red de precedencias</span>
+              <h2>Diagrama CPM</h2>
+            </div>
+          </div>
+          <div id="networkCanvas" class="network-canvas"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Herramienta web para docencia y programación de obra.</span>
+    <span>HTML + CSS + JavaScript · Compatible con GitHub Pages.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
