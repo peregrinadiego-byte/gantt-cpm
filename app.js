@@ -1,3 +1,4 @@
+const AUTHOR = 'Luis Diego Peregrina García';
 const initialActivities = [
   {key:'C1', name:'Preliminares de obra', pred:'', duration:9},
   {key:'C2', name:'Excavaciones', pred:'C1', duration:2},
@@ -15,13 +16,9 @@ const initialActivities = [
 ];
 
 let activities = JSON.parse(localStorage.getItem('cpmActivities') || 'null') || structuredClone(initialActivities);
+let pendingDeleteKey = null;
 const startInput = document.getElementById('projectStart');
 startInput.value = localStorage.getItem('cpmStart') || '2026-09-05';
-
-let pendingDeleteIndex = null;
-let currentPreviewType = 'activities';
-let lastDatedRows = [];
-const calendarUI = { search:'', filter:'all', sort:'start', selectedKey:null };
 
 function topoSort(items){
   const map = Object.fromEntries(items.map(a=>[a.key,a]));
@@ -76,6 +73,8 @@ function addProjectDays(date, days, mode='natural'){
 }
 function fmtDate(d){ return d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function getMode(){ return document.getElementById('calendarMode').value; }
+function escapeHtml(value){ return String(value ?? '').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;' }[c])); }
+function safeName(value){ return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'').toLowerCase(); }
 
 function enrichDates(rows){
   const start = startInput.value;
@@ -91,7 +90,6 @@ function render(){
   const rows = computeCPM();
   if(!rows.length) return;
   const dated=enrichDates(rows);
-  lastDatedRows = dated;
   localStorage.setItem('cpmActivities',JSON.stringify(activities));
   localStorage.setItem('cpmStart',startInput.value);
   renderKPIs(dated);
@@ -115,26 +113,57 @@ function renderKPIs(rows){
 function renderActivityTable(rows){
   const tbody=document.querySelector('#activityTable tbody');
   tbody.innerHTML='';
-  rows.forEach((r,i)=>{
+  rows.forEach(r=>{
     const tr=document.createElement('tr');
     if(r.critical) tr.classList.add('critical-row');
     tr.innerHTML=`
-      <td><input data-i="${i}" data-f="key" value="${r.key}"></td>
-      <td><input data-i="${i}" data-f="name" value="${r.name}"></td>
-      <td><input data-i="${i}" data-f="pred" value="${r.pred||''}"></td>
-      <td><input type="number" min="0" data-i="${i}" data-f="duration" value="${r.duration}"></td>
+      <td><input data-key="${escapeHtml(r.key)}" data-f="key" value="${escapeHtml(r.key)}"></td>
+      <td><input data-key="${escapeHtml(r.key)}" data-f="name" value="${escapeHtml(r.name)}"></td>
+      <td><input data-key="${escapeHtml(r.key)}" data-f="pred" value="${escapeHtml(r.pred||'')}"></td>
+      <td><input type="number" min="0" data-key="${escapeHtml(r.key)}" data-f="duration" value="${r.duration}"></td>
       <td>${r.es}</td><td>${r.ef}</td><td>${r.ls}</td><td>${r.lf}</td>
       <td class="slack-cell">${r.slack}</td><td>${r.critical?'CRÍTICA':'No crítica'}</td>
-      <td><button class="remove-btn" data-remove="${i}" title="Eliminar actividad" aria-label="Eliminar ${r.key}">×</button></td>`;
+      <td><button class="remove-btn" data-remove="${escapeHtml(r.key)}" title="Eliminar actividad" aria-label="Eliminar ${escapeHtml(r.key)}">×</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll('input').forEach(el=>el.addEventListener('change',e=>{
-    const i=+e.target.dataset.i, f=e.target.dataset.f;
-    activities[i][f]=f==='duration'?Number(e.target.value):e.target.value.trim(); render();
+    const originalKey=e.target.dataset.key, f=e.target.dataset.f;
+    const index=activities.findIndex(a=>a.key===originalKey);
+    if(index<0) return;
+    const oldKey=activities[index].key;
+    const newValue=f==='duration'?Number(e.target.value):e.target.value.trim();
+    activities[index][f]=newValue;
+    if(f==='key' && newValue && newValue!==oldKey){
+      activities.forEach(a=>{ if(a.pred===oldKey) a.pred=newValue; });
+    }
+    render();
   }));
-  tbody.querySelectorAll('[data-remove]').forEach(btn=>btn.addEventListener('click',()=>{
-    openDeleteConfirmation(+btn.dataset.remove);
-  }));
+  tbody.querySelectorAll('[data-remove]').forEach(btn=>btn.addEventListener('click',()=>openDeleteModal(btn.dataset.remove)));
+}
+
+function openDeleteModal(key){
+  const rows=computeCPM();
+  const row=rows.find(r=>r.key===key);
+  if(!row) return;
+  pendingDeleteKey=key;
+  document.getElementById('deleteMessage').innerHTML=`Estás a punto de eliminar <strong>${escapeHtml(row.key)} — ${escapeHtml(row.name)}</strong>. Al confirmar, la actividad se quitará de la hoja de actividades y se recalcularán las vistas vinculadas.`;
+  document.getElementById('criticalWarning').hidden=!row.critical;
+  const modal=document.getElementById('deleteModal');
+  modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  document.getElementById('cancelDeleteBtn').focus();
+}
+function closeDeleteModal(){
+  pendingDeleteKey=null;
+  const modal=document.getElementById('deleteModal');
+  modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
+}
+function confirmDelete(){
+  if(!pendingDeleteKey) return closeDeleteModal();
+  const key=pendingDeleteKey;
+  activities=activities.filter(a=>a.key!==key);
+  activities.forEach(a=>{ if(a.pred===key) a.pred=''; });
+  closeDeleteModal();
+  render();
 }
 
 function slackClass(v,max){ if(v===0) return 'slack-0'; if(v <= max*.33) return 'slack-low'; return 'slack-high'; }
@@ -143,57 +172,18 @@ function renderCPM(rows){
   const max=Math.max(...rows.map(r=>r.slack),1);
   rows.forEach(r=>{
     const tr=document.createElement('tr'); if(r.critical) tr.classList.add('critical-row');
-    tr.innerHTML=`<td>${r.key}</td><td>${r.name}</td><td>${r.duration}</td><td>${r.es}</td><td>${r.ef}</td><td>${r.ls}</td><td>${r.lf}</td><td class="${slackClass(r.slack,max)}">${r.slack}</td><td>${r.critical?'CRÍTICA':'No crítica'}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.name)}</td><td>${r.duration}</td><td>${r.es}</td><td>${r.ef}</td><td>${r.ls}</td><td>${r.lf}</td><td class="${slackClass(r.slack,max)}">${r.slack}</td><td>${r.critical?'CRÍTICA':'No crítica'}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 function renderCalendar(rows){
   const tbody=document.querySelector('#calendarTable tbody'); tbody.innerHTML='';
-  const term=calendarUI.search.trim().toLowerCase();
-  let view=rows.filter(r=>{
-    const matchesText=!term || `${r.key} ${r.name}`.toLowerCase().includes(term);
-    const matchesFilter=calendarUI.filter==='all' || (calendarUI.filter==='critical' && r.critical) || (calendarUI.filter==='noncritical' && !r.critical);
-    return matchesText && matchesFilter;
-  });
-  view=[...view].sort((a,b)=>{
-    if(calendarUI.sort==='finish') return a.finishDate-b.finishDate || a.startDate-b.startDate;
-    if(calendarUI.sort==='key') return a.key.localeCompare(b.key,undefined,{numeric:true});
-    if(calendarUI.sort==='slack') return a.slack-b.slack || a.es-b.es;
-    return a.startDate-b.startDate || a.finishDate-b.finishDate;
-  });
-  view.forEach(r=>{
-    const tr=document.createElement('tr');
-    if(r.critical) tr.classList.add('critical-row');
-    if(calendarUI.selectedKey===r.key) tr.classList.add('calendar-selected');
-    tr.tabIndex=0;
-    tr.dataset.key=r.key;
-    tr.innerHTML=`<td>${r.key}</td><td>${r.name}</td><td>${fmtDate(r.startDate)}</td><td>${fmtDate(r.finishDate)}</td><td>${r.duration}</td><td>${r.pred||'—'}</td><td>${r.slack}</td><td>${r.critical?'Sí':'No'}</td>`;
-    tr.addEventListener('click',()=>selectCalendarRow(r));
-    tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); selectCalendarRow(r); } });
+  rows.forEach(r=>{
+    const tr=document.createElement('tr'); if(r.critical) tr.classList.add('critical-row');
+    tr.innerHTML=`<td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.name)}</td><td>${fmtDate(r.startDate)}</td><td>${fmtDate(r.finishDate)}</td><td>${r.duration}</td><td>${escapeHtml(r.pred||'—')}</td><td>${r.slack}</td><td>${r.critical?'Sí':'No'}</td>`;
     tbody.appendChild(tr);
   });
-  const total=rows.length, critical=rows.filter(r=>r.critical).length;
-  const summary=document.getElementById('calendarSummary');
-  summary.innerHTML=`<span><b>${view.length}</b> de ${total} actividades visibles</span><span><b>${critical}</b> críticas</span><span>Selecciona una fila para consultar su detalle.</span>`;
-  if(!view.some(r=>r.key===calendarUI.selectedKey)){
-    calendarUI.selectedKey=null;
-    document.getElementById('calendarDetail').hidden=true;
-  }
-}
-
-function selectCalendarRow(r){
-  calendarUI.selectedKey=r.key;
-  const detail=document.getElementById('calendarDetail');
-  detail.hidden=false;
-  detail.innerHTML=`
-    <div><span>Actividad seleccionada</span><strong>${r.key} · ${r.name}</strong></div>
-    <div><span>Inicio</span><strong>${fmtDate(r.startDate)}</strong></div>
-    <div><span>Fin</span><strong>${fmtDate(r.finishDate)}</strong></div>
-    <div><span>Duración</span><strong>${r.duration} días</strong></div>
-    <div><span>Holgura</span><strong>${r.slack} días</strong></div>
-    <div><span>Condición</span><strong>${r.critical?'Ruta crítica':'No crítica'}</strong></div>`;
-  renderCalendar(lastDatedRows);
 }
 
 function renderGantt(rows){
@@ -209,7 +199,7 @@ function renderGantt(rows){
   grid.appendChild(head);
   rows.forEach(r=>{
     const row=document.createElement('div'); row.className='gantt-row';
-    row.innerHTML=`<div>${r.key}</div><div class="label">${r.name}</div>`;
+    row.innerHTML=`<div>${escapeHtml(r.key)}</div><div class="label">${escapeHtml(r.name)}</div>`;
     for(let d=0;d<duration;d++){
       const c=document.createElement('div'); c.className='day';
       const date=addProjectDays(startInput.value,d,getMode());
@@ -234,7 +224,7 @@ function renderNetwork(rows){
       const x=30+Number(lvl)*levelGap, y=40+idx*rowGap;
       pos[r.key]={x,y};
       const n=document.createElement('div'); n.className='node'+(r.critical?' critical':''); n.style.left=x+'px'; n.style.top=y+'px';
-      n.innerHTML=`<h4>${r.key} · ${r.name}</h4><p>Duración: ${r.duration} días</p><p>ES–EF: ${r.es}–${r.ef}</p><p>LS–LF: ${r.ls}–${r.lf}</p><p>Holgura: ${r.slack}</p>`;
+      n.innerHTML=`<h4>${escapeHtml(r.key)} · ${escapeHtml(r.name)}</h4><p>Duración: ${r.duration} días</p><p>ES–EF: ${r.es}–${r.ef}</p><p>LS–LF: ${r.ls}–${r.lf}</p><p>Holgura: ${r.slack}</p>`;
       canvas.appendChild(n);
     });
   });
@@ -247,92 +237,90 @@ function renderNetwork(rows){
   });
 }
 
-function openDeleteConfirmation(index){
-  pendingDeleteIndex=index;
-  const a=activities[index];
-  document.getElementById('confirmMessage').textContent=`Vas a eliminar “${a?.key || ''} · ${a?.name || 'esta actividad'}”. Esta acción no se podrá recuperar. Si otra actividad utiliza esta clave como predecesora, deberás corregir esa relación manualmente.`;
-  setModalState(document.getElementById('confirmModal'),true);
-}
-function closeDeleteConfirmation(){
-  pendingDeleteIndex=null;
-  setModalState(document.getElementById('confirmModal'),false);
-}
-function setModalState(modal,open){
-  modal.classList.toggle('open',open);
-  modal.setAttribute('aria-hidden',open?'false':'true');
-  document.body.classList.toggle('modal-open',!!document.querySelector('.modal-backdrop.open'));
-}
-function escapeHtml(v=''){
-  return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
-}
-function getPreviewTitle(type){
-  return ({activities:'Hoja de actividades',gantt:'Diagrama de Gantt',cpm:'Método de la Ruta Crítica (CPM)',calendar:'Calendarización',network:'Red CPM'})[type] || 'Programa de obra';
-}
-function getPreviewContent(type,rows){
-  const table=(headers,body)=>`<table><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${body.map(cells=>`<tr>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-  if(type==='activities'){
-    return table(['Clave','Actividad','Predecesora','Duración','ES','EF','LS','LF','Holgura','Crítica'],rows.map(r=>[r.key,escapeHtml(r.name),r.pred||'—',r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'CRÍTICA':'No crítica']));
-  }
-  if(type==='cpm'){
-    return table(['Clave','Actividad','Duración','ES','EF','LS','LF','Holgura','Clasificación'],rows.map(r=>[r.key,escapeHtml(r.name),r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'CRÍTICA':'No crítica']));
-  }
-  if(type==='calendar'){
-    return table(['Clave','Actividad','Inicio','Fin','Duración','Predecesora','Holgura','Ruta crítica'],rows.map(r=>[r.key,escapeHtml(r.name),fmtDate(r.startDate),fmtDate(r.finishDate),r.duration,r.pred||'—',r.slack,r.critical?'Sí':'No']));
-  }
+function rowsForExport(type){
+  const rows=enrichDates(computeCPM());
+  if(type==='activities') return [
+    ['Clave','Actividad','Predecesora','Duración','ES','EF','LS','LF','Holgura','Crítica'],
+    ...rows.map(r=>[r.key,r.name,r.pred,r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'Sí':'No'])
+  ];
+  if(type==='cpm') return [
+    ['Clave','Actividad','Duración','ES','EF','LS','LF','Holgura','Clasificación'],
+    ...rows.map(r=>[r.key,r.name,r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'CRÍTICA':'No crítica'])
+  ];
+  if(type==='calendar') return [
+    ['Clave','Actividad','Inicio','Fin','Duración','Predecesora','Holgura','Ruta crítica'],
+    ...rows.map(r=>[r.key,r.name,fmtDate(r.startDate),fmtDate(r.finishDate),r.duration,r.pred,r.slack,r.critical?'Sí':'No'])
+  ];
+  if(type==='network') return [
+    ['Clave','Actividad','Predecesora','Duración','ES','EF','LS','LF','Holgura','Crítica'],
+    ...rows.map(r=>[r.key,r.name,r.pred,r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'Sí':'No'])
+  ];
   if(type==='gantt'){
     const duration=Math.max(...rows.map(r=>r.ef),0);
-    const scale=Array.from({length:duration},(_,d)=>`<div class="g-day-label">${addProjectDays(startInput.value,d,getMode()).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'})}</div>`).join('');
-    const bars=rows.map(r=>`<div class="g-row"><div class="g-name"><b>${escapeHtml(r.key)}</b><span>${escapeHtml(r.name)}</span></div><div class="g-track" style="--d:${duration}">${Array.from({length:duration},(_,d)=>`<i class="${d>=r.es&&d<r.ef?(r.critical?'crit':'norm'):''}"></i>`).join('')}</div></div>`).join('');
-    return `<div class="g-preview"><div class="g-head"><div>Actividad</div><div class="g-scale" style="--d:${duration}">${scale}</div></div>${bars}</div>`;
+    const dates=Array.from({length:duration},(_,d)=>fmtDate(addProjectDays(startInput.value,d,getMode())));
+    return [
+      ['Clave','Actividad',...dates],
+      ...rows.map(r=>[r.key,r.name,...Array.from({length:duration},(_,d)=>d>=r.es&&d<r.ef?(r.critical?'CRÍTICA':'PROGRAMADA'):'')])
+    ];
   }
-  if(type==='network'){
-    const ordered=[...rows].sort((a,b)=>a.es-b.es || a.key.localeCompare(b.key,undefined,{numeric:true}));
-    return `<div class="network-preview">${ordered.map(r=>`<article class="p-node ${r.critical?'critical':''}"><h4>${escapeHtml(r.key)} · ${escapeHtml(r.name)}</h4><p>Duración: ${r.duration} días</p><p>Predecesora: ${escapeHtml(r.pred||'—')}</p><p>ES–EF: ${r.es}–${r.ef}</p><p>LS–LF: ${r.ls}–${r.lf}</p><p>Holgura: ${r.slack}</p></article>`).join('<span class="flow">→</span>')}</div>`;
-  }
-  return '';
+  return [];
 }
-function buildPreviewDocument(){
+
+function csvText(aoa){
+  return '\ufeff'+aoa.map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');
+}
+function downloadBlob(content,type,filename){
+  const blob=content instanceof Blob?content:new Blob([content],{type});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+function downloadCSV(type){
+  downloadBlob(csvText(rowsForExport(type)),'text/csv;charset=utf-8;',`${safeName(type)}_gantt_cpm.csv`);
+}
+
+function exportWorkbook(){
+  if(typeof XLSX==='undefined'){
+    alert('No se pudo cargar el componente de exportación XLSX. Puedes descargar cada apartado en CSV de forma individual.');
+    return;
+  }
+  const wb=XLSX.utils.book_new();
+  const sheets=[['Actividades','activities'],['Gantt','gantt'],['CPM','cpm'],['Calendarizacion','calendar'],['Red_CPM','network']];
+  sheets.forEach(([name,type])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rowsForExport(type)),name));
+  XLSX.writeFile(wb,'programa_obra_gantt_cpm_completo.xlsx');
+}
+
+async function makePreview(type){
+  const titles={activities:'Hoja de actividades',gantt:'Diagrama de Gantt',cpm:'Método CPM',calendar:'Calendarización',network:'Red CPM'};
   const rows=enrichDates(computeCPM());
-  const title=document.getElementById('previewTitle').value.trim() || getPreviewTitle(currentPreviewType);
-  const subtitle=document.getElementById('previewSubtitle').value.trim();
-  const author=document.getElementById('previewAuthor').value.trim();
-  const note=document.getElementById('previewNote').value.trim();
-  const orientation=document.getElementById('previewOrientation').value;
-  const showKPIs=document.getElementById('previewShowKPIs').checked;
   const duration=Math.max(...rows.map(r=>r.ef),0);
-  const finish=addProjectDays(startInput.value,duration-1,getMode());
-  const critical=rows.filter(r=>r.critical).sort((a,b)=>a.es-b.es);
-  const kpis=showKPIs?`<section class="summary"><div><span>Inicio</span><b>${fmtDate(new Date(startInput.value+'T00:00:00'))}</b></div><div><span>Fin programado</span><b>${fmtDate(finish)}</b></div><div><span>Duración</span><b>${duration} días</b></div><div><span>Ruta crítica</span><b>${critical.map(r=>escapeHtml(r.key)).join(' → ')}</b></div></section>`:'';
-  const content=getPreviewContent(currentPreviewType,rows);
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
-  @page{size:A4 ${orientation};margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;background:#fff;font-size:11px}header{border-bottom:3px solid #244a73;padding-bottom:10px;margin-bottom:14px}header small{display:block;text-transform:uppercase;letter-spacing:.12em;color:#64748b;font-weight:700}h1{font-size:23px;margin:5px 0 4px;color:#17365d}header p{margin:3px 0;color:#475569}.author{font-weight:700;color:#244a73!important}.note{white-space:pre-wrap}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 16px}.summary div{border:1px solid #dbe3ee;border-radius:8px;padding:8px}.summary span{display:block;color:#64748b;font-size:9px;font-weight:700}.summary b{display:block;margin-top:4px;font-size:11px}table{width:100%;border-collapse:collapse}th{background:#eaf0f6;color:#17365d;text-align:left}th,td{padding:6px 7px;border:1px solid #dbe3ee}.g-preview{overflow:hidden}.g-head,.g-row{display:grid;grid-template-columns:180px 1fr}.g-head>div{font-weight:700;background:#eef3f8;padding:6px}.g-scale,.g-track{display:grid;grid-template-columns:repeat(var(--d),minmax(5px,1fr))}.g-day-label{font-size:6.5px;text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);padding:2px 0;border-left:1px solid #e8edf3}.g-row{border-bottom:1px solid #e8edf3}.g-name{padding:5px;display:flex;gap:5px;align-items:center}.g-name span{font-size:9px}.g-track i{height:22px;border-left:1px solid #eef2f6}.g-track i.crit{background:#b42318}.g-track i.norm{background:#4f8fbd}.network-preview{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.p-node{width:165px;border:2px solid #244a73;border-radius:8px;padding:8px;background:#eef5fb;break-inside:avoid}.p-node.critical{border-color:#b42318;background:#fee4e2}.p-node h4{margin:0 0 5px;font-size:10px}.p-node p{margin:2px 0;color:#475569;font-size:8.5px}.flow{font-size:18px;color:#94a3b8}footer{margin-top:18px;border-top:1px solid #dbe3ee;padding-top:7px;color:#64748b;font-size:8px;display:flex;justify-content:space-between}
-  </style></head><body><header><small>Programación y control de obra</small><h1>${escapeHtml(title)}</h1>${subtitle?`<p>${escapeHtml(subtitle)}</p>`:''}${author?`<p class="author">${escapeHtml(author)}</p>`:''}${note?`<p class="note">${escapeHtml(note)}</p>`:''}</header>${kpis}<main>${content}</main><footer><span>${escapeHtml(author||'Luis Diego Peregrina García')}</span><span>Generado con Gantt + CPM</span></footer></body></html>`;
-}
-function updatePreviewFrame(){
-  const frame=document.getElementById('previewFrame');
-  frame.srcdoc=buildPreviewDocument();
-}
-function openPreview(type){
-  currentPreviewType=type;
-  document.getElementById('previewModalTitle').textContent=`Vista previa · ${getPreviewTitle(type)}`;
-  document.getElementById('previewTitle').value=getPreviewTitle(type);
-  setModalState(document.getElementById('previewModal'),true);
-  updatePreviewFrame();
-}
-function closePreview(){ setModalState(document.getElementById('previewModal'),false); }
-function downloadPreviewHtml(){
-  const html=buildPreviewDocument();
+  const critical=rows.filter(r=>r.critical).sort((a,b)=>a.es-b.es).map(r=>r.key).join(' → ');
+  const finish=fmtDate(addProjectDays(startInput.value,duration-1,getMode()));
+  const source=document.getElementById(type==='calendar'?'calendar':type);
+  const content=source.querySelector('.section-card').cloneNode(true);
+  content.querySelectorAll('.section-actions,.remove-btn').forEach(el=>el.remove());
+  content.querySelectorAll('input').forEach(input=>{
+    const span=document.createElement('span'); span.textContent=input.value; input.replaceWith(span);
+  });
+  content.querySelectorAll('select').forEach(select=>{
+    const span=document.createElement('span'); span.textContent=select.options[select.selectedIndex]?.text||''; select.replaceWith(span);
+  });
+  let css='';
+  try { css=await fetch('styles.css').then(r=>r.text()); } catch(e) {}
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${titles[type]} · Gantt + CPM</title><style>${css}\nbody{background:#fff}.preview-toolbar{position:sticky;top:0;z-index:9999;display:flex;gap:8px;justify-content:flex-end;padding:12px;background:#17365d}.preview-toolbar button{border:0;border-radius:9px;padding:9px 12px;font:600 14px Inter,Arial;cursor:pointer}.preview-sheet{width:min(1600px,96vw);margin:24px auto}.preview-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 20px}.preview-meta>div{border:1px solid #dbe3ee;border-radius:12px;padding:10px}.preview-meta small{display:block;color:#64748b;margin-bottom:4px}.preview-title{border-bottom:2px solid #17365d;padding-bottom:14px}.editable-hint{color:#64748b;font-size:12px}.section-card{box-shadow:none}.section-head{margin-bottom:14px}@media print{.preview-toolbar,.editable-hint{display:none}.preview-sheet{width:100%;margin:0}.card{border:0}} </style></head><body>
+  <div class="preview-toolbar"><button onclick="window.print()">Imprimir / PDF</button><button onclick="downloadEditedHtml()">Descargar HTML editado</button></div>
+  <main class="preview-sheet" contenteditable="true">
+    <header class="preview-title"><span class="eyebrow">Programación y control</span><h1>${titles[type]}</h1><p>Gantt + CPM · ${escapeHtml(AUTHOR)}</p><p class="editable-hint">Puedes editar textos directamente en esta vista antes de descargarla.</p></header>
+    <section class="preview-meta"><div><small>Inicio</small><strong>${fmtDate(addProjectDays(startInput.value,0,getMode()))}</strong></div><div><small>Duración total</small><strong>${duration} días</strong></div><div><small>Fin programado</small><strong>${finish}</strong></div><div><small>Ruta crítica</small><strong>${escapeHtml(critical)}</strong></div></section>
+    ${content.outerHTML}
+    <footer style="margin-top:24px">© ${escapeHtml(AUTHOR)} · Herramienta académica para programación y control de obra.</footer>
+  </main>
+<script>function downloadEditedHtml(){const clone=document.documentElement.cloneNode(true);const toolbar=clone.querySelector('.preview-toolbar');if(toolbar)toolbar.remove();const blob=new Blob(['<!doctype html>'+clone.outerHTML],{type:'text/html;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='${safeName(titles[type])}_personalizado.html';a.click();setTimeout(()=>URL.revokeObjectURL(u),500);}<\/script></body></html>`;
   const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${currentPreviewType}_cpm.html`;
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),500);
-}
-function printPreview(){
-  const frame=document.getElementById('previewFrame');
-  frame.contentWindow.focus();
-  frame.contentWindow.print();
+  const url=URL.createObjectURL(blob);
+  const win=window.open(url,'_blank');
+  if(!win) downloadBlob(blob,'text/html;charset=utf-8',`${safeName(titles[type])}_vista_previa.html`);
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
 document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
@@ -341,43 +329,16 @@ document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>
 }));
 startInput.addEventListener('change',render);
 document.getElementById('calendarMode').addEventListener('change',render);
-document.getElementById('addRowBtn').addEventListener('click',()=>{ activities.push({key:`C${activities.length+1}`,name:'Nueva actividad',pred:'',duration:1}); render(); });
+document.getElementById('addRowBtn').addEventListener('click',()=>{
+  const used=new Set(activities.map(a=>a.key)); let n=activities.length+1; while(used.has(`C${n}`)) n++;
+  activities.push({key:`C${n}`,name:'Nueva actividad',pred:'',duration:1}); render();
+});
 document.getElementById('resetBtn').addEventListener('click',()=>{ activities=structuredClone(initialActivities); startInput.value='2026-09-05'; localStorage.clear(); render(); });
-document.getElementById('exportBtn').addEventListener('click',()=>{
-  const rows=enrichDates(computeCPM());
-  const csv=[['Clave','Actividad','Predecesora','Duración','ES','EF','LS','LF','Holgura','Crítica','Inicio','Fin'],...rows.map(r=>[r.key,r.name,r.pred,r.duration,r.es,r.ef,r.ls,r.lf,r.slack,r.critical?'Sí':'No',fmtDate(r.startDate),fmtDate(r.finishDate)])]
-    .map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');
-  const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='programa_obra_cpm.csv'; a.click(); URL.revokeObjectURL(a.href);
-});
-
-document.getElementById('confirmCancel').addEventListener('click',closeDeleteConfirmation);
-document.getElementById('confirmDelete').addEventListener('click',()=>{
-  if(pendingDeleteIndex!==null){ activities.splice(pendingDeleteIndex,1); closeDeleteConfirmation(); render(); }
-});
-document.getElementById('confirmModal').addEventListener('click',e=>{ if(e.target.id==='confirmModal') closeDeleteConfirmation(); });
-
-document.querySelectorAll('.preview-btn').forEach(btn=>btn.addEventListener('click',()=>openPreview(btn.dataset.preview)));
-document.getElementById('previewClose').addEventListener('click',closePreview);
-document.getElementById('previewModal').addEventListener('click',e=>{ if(e.target.id==='previewModal') closePreview(); });
-['previewTitle','previewSubtitle','previewAuthor','previewNote','previewOrientation','previewShowKPIs'].forEach(id=>{
-  const el=document.getElementById(id);
-  el.addEventListener(el.type==='checkbox'||el.tagName==='SELECT'?'change':'input',updatePreviewFrame);
-});
-document.getElementById('previewDownload').addEventListener('click',downloadPreviewHtml);
-document.getElementById('previewPrint').addEventListener('click',printPreview);
-
-document.getElementById('calendarSearch').addEventListener('input',e=>{ calendarUI.search=e.target.value; renderCalendar(lastDatedRows); });
-document.getElementById('calendarCriticalFilter').addEventListener('change',e=>{ calendarUI.filter=e.target.value; renderCalendar(lastDatedRows); });
-document.getElementById('calendarSort').addEventListener('change',e=>{ calendarUI.sort=e.target.value; renderCalendar(lastDatedRows); });
-document.getElementById('calendarClearFilters').addEventListener('click',()=>{
-  calendarUI.search=''; calendarUI.filter='all'; calendarUI.sort='start'; calendarUI.selectedKey=null;
-  document.getElementById('calendarSearch').value='';
-  document.getElementById('calendarCriticalFilter').value='all';
-  document.getElementById('calendarSort').value='start';
-  document.getElementById('calendarDetail').hidden=true;
-  renderCalendar(lastDatedRows);
-});
-
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeDeleteConfirmation(); closePreview(); } });
-
+document.getElementById('exportWorkbookBtn').addEventListener('click',exportWorkbook);
+document.querySelectorAll('.csv-btn').forEach(btn=>btn.addEventListener('click',()=>downloadCSV(btn.dataset.csv)));
+document.querySelectorAll('.preview-btn').forEach(btn=>btn.addEventListener('click',()=>makePreview(btn.dataset.preview)));
+document.getElementById('cancelDeleteBtn').addEventListener('click',closeDeleteModal);
+document.getElementById('confirmDeleteBtn').addEventListener('click',confirmDelete);
+document.getElementById('deleteModal').addEventListener('click',e=>{ if(e.target.id==='deleteModal') closeDeleteModal(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.getElementById('deleteModal').classList.contains('open')) closeDeleteModal(); });
 render();
