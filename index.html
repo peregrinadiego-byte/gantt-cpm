@@ -7,163 +7,178 @@
   <title>Gantt + CPM | Programación de Obra</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <span class="eyebrow">Programación y control</span>
-      <h1>Gantt + CPM</h1>
-      <p>Herramienta para calendarización, ruta crítica y lectura de holguras.</p>
-      <p class="author-line">Desarrollado por <strong>Luis Diego Peregrina García</strong></p>
-    </div>
-    <div class="top-actions">
-      <button id="resetBtn" class="btn btn-secondary">Restablecer</button>
-      <button id="exportWorkbookBtn" class="btn btn-primary">Descargar todo (.xlsx)</button>
-    </div>
-  </header>
-
-  <main class="app-shell">
-    <section class="controls card">
-      <div class="control-group">
-        <label for="projectStart">Fecha de inicio</label>
-        <input type="date" id="projectStart" value="2026-09-05" />
-      </div>
-      <div class="control-group">
-        <label for="calendarMode">Calendario</label>
-        <select id="calendarMode">
-          <option value="natural">Días naturales</option>
-          <option value="laboral">Lunes a sábado</option>
-        </select>
-      </div>
-      <div class="control-group control-wide">
-        <label>Lectura rápida</label>
-        <div class="legend-inline">
-          <span><i class="dot critical"></i> Ruta crítica</span>
-          <span><i class="dot normal"></i> No crítica</span>
-          <span><i class="dot slack"></i> Mayor holgura</span>
+  <div class="sheet-frame">
+    <header class="topbar">
+      <div class="title-block">
+        <div class="doc-index">
+          <span class="doc-code">PC-01</span>
+          <span class="eyebrow">Programación y control de obra</span>
+        </div>
+        <div class="title-copy">
+          <h1>Gantt + CPM</h1>
+          <p>Calendarización, precedencias, ruta crítica y lectura de holguras.</p>
+        </div>
+        <div class="author-block">
+          <span>Autor</span>
+          <strong>Luis Diego Peregrina García</strong>
         </div>
       </div>
-    </section>
-
-    <section class="kpis">
-      <article class="kpi-card"><span>Duración total</span><strong id="kpiDuration">84 días</strong></article>
-      <article class="kpi-card"><span>Fin programado</span><strong id="kpiFinish">27/11/2026</strong></article>
-      <article class="kpi-card"><span>Actividades críticas</span><strong id="kpiCritical">6</strong></article>
-      <article class="kpi-card"><span>Ruta crítica</span><strong id="kpiRoute" class="route-text">C1 → C2 → C3 → C4 → C5 → C7</strong></article>
-    </section>
-
-    <section class="tabs-wrap">
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="activities">Actividades</button>
-        <button class="tab" data-tab="gantt">Gantt</button>
-        <button class="tab" data-tab="cpm">CPM</button>
-        <button class="tab" data-tab="calendar">Calendarización</button>
-        <button class="tab" data-tab="network">Red CPM</button>
+      <div class="top-actions">
+        <button id="resetBtn" class="btn btn-secondary">Restablecer</button>
+        <button id="exportWorkbookBtn" class="btn btn-primary">Descargar todo (.xlsx)</button>
       </div>
+    </header>
 
-      <div id="activities" class="tab-panel active">
-        <div class="card section-card">
-          <div class="section-head">
-            <div><span class="eyebrow">Base editable</span><h2>Hoja de actividades</h2></div>
-            <div class="section-actions">
-              <button class="btn btn-secondary preview-btn" data-preview="activities">Vista previa HTML</button>
-              <button class="btn btn-secondary csv-btn" data-csv="activities">Descargar CSV</button>
-              <button id="addRowBtn" class="btn btn-secondary">Agregar actividad</button>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table id="activityTable">
-              <thead><tr><th>Clave</th><th>Actividad</th><th>Predecesora</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura</th><th>Crítica</th><th></th></tr></thead>
-              <tbody></tbody>
-            </table>
+    <main class="app-shell">
+      <section class="controls card" aria-label="Parámetros del proyecto">
+        <div class="section-tag">01 / Parámetros</div>
+        <div class="control-group">
+          <label for="projectStart">Fecha de inicio</label>
+          <input type="date" id="projectStart" value="2026-09-05" />
+        </div>
+        <div class="control-group">
+          <label for="calendarMode">Calendario</label>
+          <select id="calendarMode">
+            <option value="natural">Días naturales</option>
+            <option value="laboral">Lunes a sábado</option>
+          </select>
+        </div>
+        <div class="control-group control-wide">
+          <label>Leyenda de lectura</label>
+          <div class="legend-inline">
+            <span><i class="dot critical"></i> Ruta crítica</span>
+            <span><i class="dot normal"></i> No crítica</span>
+            <span><i class="dot slack"></i> Mayor holgura</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div id="gantt" class="tab-panel">
-        <div class="card section-card">
-          <div class="section-head">
-            <div><span class="eyebrow">Vista temporal</span><h2>Diagrama de Gantt</h2></div>
-            <div class="section-actions">
-              <button class="btn btn-secondary preview-btn" data-preview="gantt">Vista previa HTML</button>
-              <button class="btn btn-secondary csv-btn" data-csv="gantt">Descargar CSV</button>
-            </div>
-          </div>
-          <div id="ganttWrap" class="gantt-wrap"></div>
+      <section class="kpis" aria-label="Resumen del proyecto">
+        <article class="kpi-card"><span>Duración total</span><strong id="kpiDuration">84 días</strong><small>plazo calculado</small></article>
+        <article class="kpi-card"><span>Fin programado</span><strong id="kpiFinish">27/11/2026</strong><small>fecha resultante</small></article>
+        <article class="kpi-card"><span>Actividades críticas</span><strong id="kpiCritical">6</strong><small>holgura = 0</small></article>
+        <article class="kpi-card route-card"><span>Ruta crítica</span><strong id="kpiRoute" class="route-text">C1 → C2 → C3 → C4 → C5 → C7</strong><small>secuencia de control</small></article>
+      </section>
+
+      <section class="tabs-wrap">
+        <div class="tabs" role="tablist" aria-label="Vistas del proyecto">
+          <button class="tab active" data-tab="activities"><b>01</b><span>Actividades</span></button>
+          <button class="tab" data-tab="gantt"><b>02</b><span>Gantt</span></button>
+          <button class="tab" data-tab="cpm"><b>03</b><span>CPM</span></button>
+          <button class="tab" data-tab="calendar"><b>04</b><span>Calendarización</span></button>
+          <button class="tab" data-tab="network"><b>05</b><span>Red CPM</span></button>
         </div>
-      </div>
 
-      <div id="cpm" class="tab-panel">
-        <div class="card section-card">
-          <div class="section-head">
-            <div><span class="eyebrow">Método CPM</span><h2>Lectura de ruta crítica y holguras</h2></div>
-            <div class="section-actions">
-              <button class="btn btn-secondary preview-btn" data-preview="cpm">Vista previa HTML</button>
-              <button class="btn btn-secondary csv-btn" data-csv="cpm">Descargar CSV</button>
+        <div class="workspace">
+          <div id="activities" class="tab-panel active">
+            <div class="card section-card">
+              <div class="section-head">
+                <div class="section-title"><span class="eyebrow">Base editable</span><h2>Hoja de actividades</h2><p>Edite claves, precedencias y duraciones. Los cálculos vinculados se actualizan automáticamente.</p></div>
+                <div class="section-actions">
+                  <button class="btn btn-secondary preview-btn" data-preview="activities">Vista previa HTML</button>
+                  <button class="btn btn-secondary csv-btn" data-csv="activities">Descargar CSV</button>
+                  <button id="addRowBtn" class="btn btn-primary">Agregar actividad</button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="activityTable">
+                  <thead><tr><th>Clave</th><th>Actividad</th><th>Predecesora</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura</th><th>Crítica</th><th></th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
             </div>
           </div>
-          <div class="cpm-grid">
-            <div class="table-wrap">
-              <table id="cpmTable">
-                <thead><tr><th>Clave</th><th>Actividad</th><th>Dur.</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura</th><th>Clasificación</th></tr></thead>
-                <tbody></tbody>
-              </table>
+
+          <div id="gantt" class="tab-panel">
+            <div class="card section-card">
+              <div class="section-head">
+                <div class="section-title"><span class="eyebrow">Vista temporal</span><h2>Diagrama de Gantt</h2><p>Distribución de actividades sobre el calendario del proyecto.</p></div>
+                <div class="section-actions">
+                  <button class="btn btn-secondary preview-btn" data-preview="gantt">Vista previa HTML</button>
+                  <button class="btn btn-secondary csv-btn" data-csv="gantt">Descargar CSV</button>
+                </div>
+              </div>
+              <div id="ganttWrap" class="gantt-wrap"></div>
             </div>
-            <aside class="cpm-legend">
-              <h3>Cómo leer el CPM</h3>
-              <p><b>ES / EF:</b> inicio y fin tempranos.</p>
-              <p><b>LS / LF:</b> inicio y fin tardíos.</p>
-              <p><b>Holgura = 0:</b> la actividad controla el plazo.</p>
-              <div class="scale"><span>0</span><div class="scale-bar"></div><span>máx.</span></div>
-            </aside>
+          </div>
+
+          <div id="cpm" class="tab-panel">
+            <div class="card section-card">
+              <div class="section-head">
+                <div class="section-title"><span class="eyebrow">Método CPM</span><h2>Ruta crítica y holguras</h2><p>Lectura comparada de tiempos tempranos, tardíos y margen disponible.</p></div>
+                <div class="section-actions">
+                  <button class="btn btn-secondary preview-btn" data-preview="cpm">Vista previa HTML</button>
+                  <button class="btn btn-secondary csv-btn" data-csv="cpm">Descargar CSV</button>
+                </div>
+              </div>
+              <div class="cpm-grid">
+                <div class="table-wrap">
+                  <table id="cpmTable">
+                    <thead><tr><th>Clave</th><th>Actividad</th><th>Dur.</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura</th><th>Clasificación</th></tr></thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <aside class="cpm-legend">
+                  <div class="section-tag">Lectura CPM</div>
+                  <h3>Interpretación</h3>
+                  <p><b>ES / EF</b> — inicio y fin tempranos.</p>
+                  <p><b>LS / LF</b> — inicio y fin tardíos.</p>
+                  <p><b>Holgura = 0</b> — la actividad controla el plazo.</p>
+                  <div class="scale"><span>0</span><div class="scale-bar"></div><span>máx.</span></div>
+                </aside>
+              </div>
+            </div>
+          </div>
+
+          <div id="calendar" class="tab-panel">
+            <div class="card section-card">
+              <div class="section-head">
+                <div class="section-title"><span class="eyebrow">Fechas programadas</span><h2>Calendarización</h2><p>Inicio y fin programado de cada actividad con su condición crítica.</p></div>
+                <div class="section-actions">
+                  <button class="btn btn-secondary preview-btn" data-preview="calendar">Vista previa HTML</button>
+                  <button class="btn btn-secondary csv-btn" data-csv="calendar">Descargar CSV</button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="calendarTable">
+                  <thead><tr><th>Clave</th><th>Actividad</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Predecesora</th><th>Holgura</th><th>Ruta crítica</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="network" class="tab-panel">
+            <div class="card section-card">
+              <div class="section-head">
+                <div class="section-title"><span class="eyebrow">Red de precedencias</span><h2>Diagrama CPM</h2><p>Nodos de actividad conectados por relación de precedencia.</p></div>
+                <div class="section-actions">
+                  <button class="btn btn-secondary preview-btn" data-preview="network">Vista previa HTML</button>
+                  <button class="btn btn-secondary csv-btn" data-csv="network">Descargar CSV</button>
+                </div>
+              </div>
+              <div id="networkCanvas" class="network-canvas"></div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
+    </main>
 
-      <div id="calendar" class="tab-panel">
-        <div class="card section-card">
-          <div class="section-head">
-            <div><span class="eyebrow">Fechas programadas</span><h2>Calendarización</h2></div>
-            <div class="section-actions">
-              <button class="btn btn-secondary preview-btn" data-preview="calendar">Vista previa HTML</button>
-              <button class="btn btn-secondary csv-btn" data-csv="calendar">Descargar CSV</button>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table id="calendarTable">
-              <thead><tr><th>Clave</th><th>Actividad</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Predecesora</th><th>Holgura</th><th>Ruta crítica</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div id="network" class="tab-panel">
-        <div class="card section-card">
-          <div class="section-head">
-            <div><span class="eyebrow">Red de precedencias</span><h2>Diagrama CPM</h2></div>
-            <div class="section-actions">
-              <button class="btn btn-secondary preview-btn" data-preview="network">Vista previa HTML</button>
-              <button class="btn btn-secondary csv-btn" data-csv="network">Descargar CSV</button>
-            </div>
-          </div>
-          <div id="networkCanvas" class="network-canvas"></div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <span>© Luis Diego Peregrina García · Herramienta académica para programación y control de obra.</span>
-    <span>HTML + CSS + JavaScript · Compatible con GitHub Pages.</span>
-  </footer>
+    <footer>
+      <span>PC-01 · GANTT + CPM</span>
+      <span>© Luis Diego Peregrina García · Herramienta académica para programación y control de obra.</span>
+      <span>HTML + CSS + JavaScript · Compatible con GitHub Pages.</span>
+    </footer>
+  </div>
 
   <div id="deleteModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
-      <div class="modal-icon">!</div>
+      <div class="modal-kicker">Acción irreversible</div>
       <h3 id="deleteTitle">Confirmar eliminación de actividad</h3>
       <p id="deleteMessage"></p>
       <div id="criticalWarning" class="critical-warning" hidden>Esta actividad pertenece a la ruta crítica. Su eliminación puede modificar el plazo total del proyecto.</div>
