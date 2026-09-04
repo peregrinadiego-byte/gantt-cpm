@@ -18,14 +18,6 @@ Herramienta web estática para programación de obra mediante diagrama de Gantt,
 - Exportación global a un archivo Excel (.xlsx) con cinco hojas.
 - Persistencia local de los cambios en el navegador.
 
-## Publicación en GitHub Pages
-
-1. Crea un repositorio nuevo en GitHub.
-2. Sube `index.html`, `styles.css`, `app.js` y `README.md` a la raíz.
-3. Abre **Settings → Pages**.
-4. Selecciona **Deploy from a branch**.
-5. Selecciona la rama `main` y la carpeta `/ (root)`.
-6. Guarda los cambios.
 
 La exportación global `.xlsx` usa SheetJS desde CDN. Las exportaciones CSV y las vistas previas HTML funcionan directamente desde el navegador.
 
