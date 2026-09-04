@@ -16,6 +16,7 @@
       <span class="eyebrow">Programación y control</span>
       <h1>Gantt + CPM</h1>
       <p>Herramienta para calendarización, ruta crítica y lectura de holguras.</p>
+      <p class="author-line">Luis Diego Peregrina García</p>
     </div>
     <div class="top-actions">
       <button id="resetBtn" class="btn btn-secondary">Restablecer</button>
@@ -81,7 +82,10 @@
               <span class="eyebrow">Base editable</span>
               <h2>Hoja de actividades</h2>
             </div>
-            <button id="addRowBtn" class="btn btn-secondary">Agregar actividad</button>
+            <div class="section-actions">
+              <button class="btn btn-ghost preview-btn" data-preview="activities">Vista previa</button>
+              <button id="addRowBtn" class="btn btn-secondary">Agregar actividad</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table id="activityTable">
@@ -113,6 +117,7 @@
               <span class="eyebrow">Vista temporal</span>
               <h2>Diagrama de Gantt</h2>
             </div>
+            <button class="btn btn-ghost preview-btn" data-preview="gantt">Vista previa</button>
           </div>
           <div id="ganttWrap" class="gantt-wrap"></div>
         </div>
@@ -125,6 +130,7 @@
               <span class="eyebrow">Método CPM</span>
               <h2>Lectura de ruta crítica y holguras</h2>
             </div>
+            <button class="btn btn-ghost preview-btn" data-preview="cpm">Vista previa</button>
           </div>
           <div class="cpm-grid">
             <div class="table-wrap">
@@ -157,7 +163,34 @@
               <span class="eyebrow">Fechas programadas</span>
               <h2>Calendarización</h2>
             </div>
+            <button class="btn btn-ghost preview-btn" data-preview="calendar">Vista previa</button>
           </div>
+          <div class="calendar-tools" aria-label="Filtros de calendarización">
+            <div class="calendar-search">
+              <label for="calendarSearch">Buscar actividad</label>
+              <input id="calendarSearch" type="search" placeholder="Clave o actividad…">
+            </div>
+            <div>
+              <label for="calendarCriticalFilter">Mostrar</label>
+              <select id="calendarCriticalFilter">
+                <option value="all">Todas</option>
+                <option value="critical">Solo críticas</option>
+                <option value="noncritical">Solo no críticas</option>
+              </select>
+            </div>
+            <div>
+              <label for="calendarSort">Ordenar por</label>
+              <select id="calendarSort">
+                <option value="start">Inicio</option>
+                <option value="finish">Fin</option>
+                <option value="key">Clave</option>
+                <option value="slack">Holgura</option>
+              </select>
+            </div>
+            <button id="calendarClearFilters" class="btn btn-tertiary">Limpiar filtros</button>
+          </div>
+          <div id="calendarSummary" class="calendar-summary"></div>
+          <div id="calendarDetail" class="calendar-detail" hidden></div>
           <div class="table-wrap">
             <table id="calendarTable">
               <thead>
@@ -176,6 +209,7 @@
               <span class="eyebrow">Red de precedencias</span>
               <h2>Diagrama CPM</h2>
             </div>
+            <button class="btn btn-ghost preview-btn" data-preview="network">Vista previa</button>
           </div>
           <div id="networkCanvas" class="network-canvas"></div>
         </div>
@@ -184,9 +218,64 @@
   </main>
 
   <footer>
-    <span>Herramienta web para docencia y programación de obra.</span>
+    <span>Herramienta web para docencia y programación de obra · Luis Diego Peregrina García.</span>
     <span>HTML + CSS + JavaScript · Compatible con GitHub Pages.</span>
   </footer>
+
+
+  <div id="confirmModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="modal-icon danger">!</div>
+      <h3 id="confirmTitle">Eliminar actividad</h3>
+      <p id="confirmMessage">Esta acción eliminará la actividad y no se podrá recuperar. Las actividades que la utilicen como predecesora conservarán temporalmente la clave hasta que las edites.</p>
+      <div class="modal-actions">
+        <button id="confirmCancel" class="btn btn-secondary">Cancelar</button>
+        <button id="confirmDelete" class="btn btn-danger">Eliminar definitivamente</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="previewModal" class="modal-backdrop preview-backdrop" aria-hidden="true">
+    <div class="modal-card preview-modal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+      <div class="preview-modal-head">
+        <div>
+          <span class="eyebrow">Salida personalizable</span>
+          <h3 id="previewModalTitle">Vista previa</h3>
+        </div>
+        <button id="previewClose" class="icon-btn" aria-label="Cerrar">×</button>
+      </div>
+      <div class="preview-layout">
+        <aside class="preview-settings">
+          <label>Título
+            <input id="previewTitle" type="text">
+          </label>
+          <label>Subtítulo
+            <input id="previewSubtitle" type="text" value="Programación y control de obra">
+          </label>
+          <label>Autor
+            <input id="previewAuthor" type="text" value="Luis Diego Peregrina García">
+          </label>
+          <label>Nota / proyecto
+            <textarea id="previewNote" rows="3" placeholder="Nombre del proyecto, curso, obra o notas…"></textarea>
+          </label>
+          <label>Orientación
+            <select id="previewOrientation">
+              <option value="landscape">Horizontal</option>
+              <option value="portrait">Vertical</option>
+            </select>
+          </label>
+          <label class="check-line"><input id="previewShowKPIs" type="checkbox" checked> Incluir resumen del proyecto</label>
+          <div class="preview-actions">
+            <button id="previewPrint" class="btn btn-secondary">Imprimir / Guardar PDF</button>
+            <button id="previewDownload" class="btn btn-primary-solid">Descargar HTML</button>
+          </div>
+        </aside>
+        <div class="preview-stage">
+          <iframe id="previewFrame" title="Vista previa descargable"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
