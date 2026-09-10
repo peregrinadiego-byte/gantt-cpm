@@ -279,15 +279,30 @@ function downloadCSV(type){
   downloadBlob(csvText(rowsForExport(type)),'text/csv;charset=utf-8;',`${safeName(type)}_gantt_cpm.csv`);
 }
 
-function exportWorkbook(){
-  if(typeof XLSX==='undefined'){
-    alert('No se pudo cargar el componente de exportación XLSX. Puedes descargar cada apartado en CSV de forma individual.');
-    return;
-  }
-  const wb=XLSX.utils.book_new();
+function xmlEscape(value){
+  return String(value ?? '').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;' }[c]));
+}
+
+function excelWorkbookXml(){
   const sheets=[['Actividades','activities'],['Gantt','gantt'],['CPM','cpm'],['Calendarizacion','calendar'],['Red_CPM','network']];
-  sheets.forEach(([name,type])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rowsForExport(type)),name));
-  XLSX.writeFile(wb,'programa_obra_gantt_cpm_completo.xlsx');
+  const worksheets=sheets.map(([name,type])=>{
+    const rows=rowsForExport(type);
+    const table=rows.map(row=>`<Row>${row.map(value=>{
+      const numeric=typeof value==='number' && Number.isFinite(value);
+      return `<Cell><Data ss:Type="${numeric?'Number':'String'}">${xmlEscape(value)}</Data></Cell>`;
+    }).join('')}</Row>`).join('');
+    return `<Worksheet ss:Name="${xmlEscape(name)}"><Table>${table}</Table></Worksheet>`;
+  }).join('');
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office"><Author>${xmlEscape(AUTHOR)}</Author><Title>Programa de obra Gantt + CPM</Title></DocumentProperties>
+  <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel"><ProtectStructure>False</ProtectStructure></ExcelWorkbook>
+  ${worksheets}
+</Workbook>`;
+}
+
+function exportWorkbook(){
+  downloadBlob(excelWorkbookXml(),'application/vnd.ms-excel;charset=utf-8;','programa_obra_gantt_cpm_completo.xml');
 }
 
 async function makePreview(type){
@@ -306,7 +321,9 @@ async function makePreview(type){
     const span=document.createElement('span'); span.textContent=select.options[select.selectedIndex]?.text||''; select.replaceWith(span);
   });
   let css='';
-  try { css=await fetch('styles.css').then(r=>r.text()); } catch(e) {}
+  try {
+    css=Array.from(document.styleSheets).flatMap(sheet=>Array.from(sheet.cssRules||[])).map(rule=>rule.cssText).join('\n');
+  } catch(e) {}
   const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${titles[type]} · Gantt + CPM</title><style>${css}\nbody{background:#fff}.preview-toolbar{position:sticky;top:0;z-index:9999;display:flex;gap:8px;justify-content:flex-end;padding:12px;background:#17365d}.preview-toolbar button{border:0;border-radius:9px;padding:9px 12px;font:600 14px Inter,Arial;cursor:pointer}.preview-sheet{width:min(1600px,96vw);margin:24px auto}.preview-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 20px}.preview-meta>div{border:1px solid #dbe3ee;border-radius:12px;padding:10px}.preview-meta small{display:block;color:#64748b;margin-bottom:4px}.preview-title{border-bottom:2px solid #17365d;padding-bottom:14px}.editable-hint{color:#64748b;font-size:12px}.section-card{box-shadow:none}.section-head{margin-bottom:14px}@media print{.preview-toolbar,.editable-hint{display:none}.preview-sheet{width:100%;margin:0}.card{border:0}} </style></head><body>
   <div class="preview-toolbar"><button onclick="window.print()">Imprimir / PDF</button><button onclick="downloadEditedHtml()">Descargar HTML editado</button></div>
   <main class="preview-sheet" contenteditable="true">

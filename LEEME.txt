@@ -1,0 +1,13 @@
+GANTT + CPM — USO SIN INTERNET
+
+1. Abre la carpeta.
+2. Haz doble clic en index.html.
+3. Usa la pestaña Actividades para capturar tu proyecto.
+
+No necesitas instalar programas ni conectarte a internet.
+
+Importante:
+- Mantén juntos index.html, app.js y styles.css.
+- Tus cambios se guardan en este navegador y en este equipo.
+- Para entregar el proyecto a otra persona, comparte la carpeta completa.
+- “Descargar todo para Excel” crea un archivo compatible con Excel y LibreOffice.
